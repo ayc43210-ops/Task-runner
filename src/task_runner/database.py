@@ -24,8 +24,11 @@ def initialize_database(db_path: Path = DB_PATH) -> None:
                 id INTEGER PRIMARY KEY,
                 type TEXT NOT NULL,
                 payload TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed')),
                 result TEXT,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                run_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                lease_expires_at TEXT
             )
         """)
