@@ -72,3 +72,13 @@ def test_skip_future_jobs(db_path: Path) -> None:
         )
 
     assert claim_job(db_path=db_path) is None
+
+def test_claims(db_path: Path)->None:
+    submit_job("job",{},db_path=db_path)
+
+    row = claim_job(db_path=db_path)
+
+    assert row is not None
+    assert row['status'] =='running'
+    assert row['attempts'] == 1
+    assert row['lease_expires_at'] is not None
