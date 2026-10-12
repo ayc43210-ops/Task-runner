@@ -29,6 +29,7 @@ def initialize_database(db_path: Path = DB_PATH) -> None:
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 attempts INTEGER NOT NULL DEFAULT 0,
                 run_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                lease_expires_at TEXT
+                lease_expires_at TEXT,
+                last_error TEXT
             )
         """)

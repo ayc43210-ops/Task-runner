@@ -14,7 +14,9 @@ def submit_job(job_type: str, payload: dict, db_path: Path = DB_PATH) -> int:
         )
         job_id = cursor.lastrowid
         if job_id is None:
-            raise RuntimeError("Failed to retrieve the id of the submitted job") # pragm : no cover
+            raise RuntimeError(
+                "Failed to retrieve the id of the submitted job"
+            )  # pragm : no cover
 
     return job_id
 
@@ -47,3 +49,34 @@ def claim_job(db_path: Path = DB_PATH, lease_seconds: int = 30) -> dict | None:
         ).fetchone()
 
     return dict(row) if row else None
+
+
+def mark_completed(
+    job_id: int, attempts: int, result_json: str, db_path: Path = DB_PATH
+) -> bool:
+    with get_connection(db_path) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE jobs
+            SET status = 'completed', result = ?, last_error = NULL,
+                lease_expires_at = NULL
+            WHERE id = ? AND status = 'running' AND attempts = ?
+            """,
+            (result_json, job_id, attempts),
+        )
+        return cursor.rowcount == 1
+
+
+def mark_failed(
+    job_id: int, attempts: int, error: str, db_path: Path = DB_PATH
+) -> bool:
+    with get_connection(db_path) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE jobs
+            SET status = 'failed', last_error = ?, lease_expires_at = NULL
+            WHERE id = ? AND status = 'running' AND attempts = ?
+            """,
+            (error, job_id, attempts),
+        )
+        return cursor.rowcount == 1

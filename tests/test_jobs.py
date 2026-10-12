@@ -44,6 +44,7 @@ def test_only_one_thread_claims_a_job(db_path: Path) -> None:
     winners = [r for r in results if r is not None]
     assert len(winners) == 1
 
+
 def test_multiple_threads_claim_multiple_jobs(db_path: Path) -> None:
     for name in ["a", "b", "c", "d", "e", "f", "g", "h"]:
         submit_job(name, {}, db_path=db_path)
@@ -73,12 +74,13 @@ def test_skip_future_jobs(db_path: Path) -> None:
 
     assert claim_job(db_path=db_path) is None
 
-def test_claims(db_path: Path)->None:
-    submit_job("job",{},db_path=db_path)
+
+def test_claims(db_path: Path) -> None:
+    submit_job("job", {}, db_path=db_path)
 
     row = claim_job(db_path=db_path)
 
     assert row is not None
-    assert row['status'] =='running'
-    assert row['attempts'] == 1
-    assert row['lease_expires_at'] is not None
+    assert row["status"] == "running"
+    assert row["attempts"] == 1
+    assert row["lease_expires_at"] is not None
