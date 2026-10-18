@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from task_runner.database import get_connection, initialize_database
-from task_runner.jobs import claim_job, get_job, submit_job
+from task_runner.jobs import claim_job, get_job, submit_job,mark_retry
+from task_runner.retry import backoff_delay
 
 
 @pytest.fixture
@@ -84,3 +85,23 @@ def test_claims(db_path: Path) -> None:
     assert row["status"] == "running"
     assert row["attempts"] == 1
     assert row["lease_expires_at"] is not None
+
+def test_mark_retry(db_path: Path)->None:
+    job_id = submit_job("job",{},db_path=db_path)
+    claimed = claim_job(db_path=db_path)
+    assert claimed is not None
+
+    ok = mark_retry(job_id,claimed["attempts"],"ValueError: boom",60,db_path=db_path) 
+    
+    assert ok is True
+
+    job = get_job(job_id,db_path=db_path)
+
+    assert job is not None
+
+    assert job["status"] == "pending"
+    assert job["attempts"] == 1
+    assert job["last_error"] == "ValueError: boom"
+
+    assert claim_job(db_path=db_path) is None  # run_at is a minute away
+

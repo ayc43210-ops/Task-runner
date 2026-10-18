@@ -57,7 +57,7 @@ def test_handler_fails(db_path: Path) -> None:
 
     assert job is not None
 
-    assert job["status"] == "failed"
+    assert job["status"] == "pending"
     assert job["attempts"] == 1
     assert job["last_error"] == "ValueError: bad input"
     assert job["result"] is None
@@ -100,7 +100,7 @@ def test_unserializable_result_marks_job_failed(db_path: Path) -> None:
     job = get_job(job_id, db_path=db_path)
     assert job is not None
     assert job["status"] == "failed"
-    assert "TypeError" in job["last_error"]
+    assert job["last_error"] == "PermanentError: result is not JSON-serializable"
 
 
 def test_worker_processes_jobs_then_stops(db_path):

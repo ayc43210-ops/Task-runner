@@ -80,3 +80,24 @@ def mark_failed(
             (error, job_id, attempts),
         )
         return cursor.rowcount == 1
+
+def mark_retry(
+    job_id: int,
+    attempts: int,
+    error: str,
+    delay_seconds: float,
+    db_path: Path = DB_PATH,
+) -> bool:
+    with get_connection(db_path) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE jobs
+            SET status = 'pending',
+                run_at = datetime('now', ?),
+                last_error = ?,
+                lease_expires_at = NULL
+            WHERE id = ? AND status = 'running' AND attempts = ?
+            """,
+            (f"+{delay_seconds} seconds", error, job_id, attempts),
+        )
+        return cursor.rowcount == 1

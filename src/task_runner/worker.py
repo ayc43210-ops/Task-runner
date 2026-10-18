@@ -8,7 +8,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from task_runner.handler import REGISTRY, Handler
-from task_runner.jobs import DB_PATH, claim_job, mark_completed, mark_failed
+from task_runner.jobs import DB_PATH, claim_job, mark_completed, mark_failed,mark_retry
+from task_runner.retry import backoff_delay,MAX_ATTEMPTS,PermanentError
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +35,25 @@ def process_one(registry: Mapping[str, Handler], db_path: Path = DB_PATH) -> boo
 
     try:
         result = handler(json.loads(job["payload"]))
-        result_json = json.dumps(result)
+        try:
+            result_json = json.dumps(result)
+        except TypeError as exc:
+            raise PermanentError(f"result is not JSON-serializable")
+
     except Exception as exc:  # noqa: BLE001 - handlers may raise anything; record and continue
-        mark_failed(job_id, attempts, f"{type(exc).__name__}: {exc}", db_path)
-        logger.error("Job %s failed: %s", job_id, exc)
+        error = f"{type(exc).__name__}: {exc}"
+
+        if isinstance(exc,PermanentError) or attempts >= MAX_ATTEMPTS:
+            mark_failed(job_id, attempts, error, db_path)
+            logger.error("Job %s failed permanently: %s", job_id, error)
+        
+        else:
+            delay = backoff_delay(attempts)
+            mark_retry(job_id, attempts, error, delay, db_path)
+            logger.warning(
+                "Job %s failed (attempt %s of %s), retrying in %ss: %s",
+                job_id, attempts, MAX_ATTEMPTS, delay, error,
+            )
     else:
         mark_completed(job_id, attempts, result_json, db_path)
         logger.info("Job %s completed", job_id)
