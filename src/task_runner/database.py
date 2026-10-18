@@ -33,3 +33,6 @@ def initialize_database(db_path: Path = DB_PATH) -> None:
                 last_error TEXT
             )
         """)
+        
+if __name__ == "__main__":
+    initialize_database()
