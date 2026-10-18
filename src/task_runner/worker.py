@@ -68,12 +68,12 @@ def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
         time.sleep(0.02)
     raise AssertionError("condition not met before timeout")
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-
 def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+    )
+
     stop = threading.Event()
     parser = argparse.ArgumentParser()
     parser.add_argument("--poll-interval",type = float,default=1.0)
