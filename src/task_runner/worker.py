@@ -77,6 +77,9 @@ def main() -> None:
     logging.info("worker started")
 
     def request_stop(signum: int, _: object) -> None:
+        if stop.is_set():
+            logging.warning("second signal received, exiting immediately")
+            raise SystemExit(1)
         logging.info("received signal %s, finishing current job", signum)
         stop.set()
 
@@ -84,6 +87,7 @@ def main() -> None:
     signal.signal(signal.SIGTERM, request_stop)
 
     run_worker(REGISTRY, stop, db_path=DB_PATH, poll_interval = args.poll_interval)
+
 
 if __name__ == "__main__":
     main()
