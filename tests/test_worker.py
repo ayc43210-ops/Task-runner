@@ -7,6 +7,7 @@ import pytest
 from task_runner.database import get_connection, initialize_database
 from task_runner.handler import Handler
 from task_runner.jobs import claim_job, get_job, mark_completed, submit_job
+
 from task_runner.worker import process_one, run_worker, wait_until
 
 
@@ -123,3 +124,19 @@ def test_worker_processes_jobs_then_stops(db_path):
     t.join(timeout=5)
     assert not t.is_alive()
 
+def test_worker_survives_unexpected_error( monkeypatch: pytest.MonkeyPatch, db_path: Path) -> None:
+    calls: list[int] = []
+    stop = threading.Event()
+
+    def fake_process_one(registry: object, path: Path) -> bool:
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("database exploded")
+        stop.set()  # second call: tell the loop to stop
+        return False
+
+    monkeypatch.setattr("task_runner.worker.process_one", fake_process_one)
+
+    run_worker({}, stop, db_path=db_path, poll_interval=0.01)
+
+    assert len(calls) == 2
