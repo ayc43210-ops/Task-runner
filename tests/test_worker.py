@@ -1,4 +1,5 @@
 import json
+import threading
 from pathlib import Path
 
 import pytest
@@ -6,7 +7,7 @@ import pytest
 from task_runner.database import get_connection, initialize_database
 from task_runner.handler import Handler
 from task_runner.jobs import claim_job, get_job, mark_completed, submit_job
-from task_runner.worker import process_one
+from task_runner.worker import process_one,run_worker,wait_until
 
 
 @pytest.fixture
@@ -99,3 +100,26 @@ def test_unserializable_result_marks_job_failed(db_path: Path) -> None:
     assert job is not None
     assert job["status"] == "failed"
     assert "TypeError" in job["last_error"]
+
+
+def test_worker_processes_jobs_then_stops(db_path):
+    ids = [submit_job("ok", {}, db_path=db_path) for _ in range(3)]
+    stop = threading.Event()
+    t = threading.Thread(
+        target=run_worker,
+        args=({"ok": lambda p: {"done": True}}, stop, db_path, 0.05),
+    )
+    t.start()
+
+    def all_completed() -> bool:
+        return all(
+            (job := get_job(i, db_path=db_path)) is not None
+            and job["status"] == "completed"
+            for i in ids
+        )
+
+    wait_until(all_completed)
+    stop.set()
+    t.join(timeout=5)
+    assert not t.is_alive()
+
