@@ -17,7 +17,7 @@ def sleep_handler(payload: dict) -> dict:
     seconds = payload["seconds"]
 
     if isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
-        raise ValueError("seconds must be a number")
+        raise TypeError("seconds must be a number")
 
     if seconds <= 0 or seconds > 30:
         raise ValueError("seconds must be between 0 and 30")

@@ -1,15 +1,16 @@
+import argparse
 import json
-import time
+import logging
 import signal
 import threading
-import logging
-import argparse
-from collections.abc import Mapping,Callable
+import time
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
-
-from task_runner.handler import Handler,REGISTRY
+from task_runner.handler import REGISTRY, Handler
 from task_runner.jobs import DB_PATH, claim_job, mark_completed, mark_failed
+
+logger = logging.getLogger(__name__)
 
 
 def process_one(registry: Mapping[str, Handler], db_path: Path = DB_PATH) -> bool:
@@ -18,7 +19,7 @@ def process_one(registry: Mapping[str, Handler], db_path: Path = DB_PATH) -> boo
     if job is None:
         return False
 
-    logging.info(
+    logger.info(
         "Claimed job %s of type %s",
         job["id"],
         job["type"],
@@ -36,10 +37,10 @@ def process_one(registry: Mapping[str, Handler], db_path: Path = DB_PATH) -> boo
         result_json = json.dumps(result)
     except Exception as exc:  # noqa: BLE001 - handlers may raise anything; record and continue
         mark_failed(job_id, attempts, f"{type(exc).__name__}: {exc}", db_path)
-        logging.error("Job %s failed: %s", job_id, exc)
+        logger.error("Job %s failed: %s", job_id, exc)
     else:
         mark_completed(job_id, attempts, result_json, db_path)
-        logging.info("Job %s completed", job_id)
+        logger.info("Job %s completed", job_id)
 
     return True
 
@@ -49,10 +50,14 @@ def run_worker(
         db_path: Path = DB_PATH,
         poll_interval: float = 1.0,
     )->None:
-        while not stop.is_set():
-            did_work = process_one(registry,db_path)
-            if not did_work:
-                stop.wait(poll_interval)
+       while not stop.is_set():
+        try:
+            did_work = process_one(registry, db_path)
+        except Exception:
+            logger.exception("process_one crashed; backing off")
+            did_work = False
+        if not did_work:
+            stop.wait(poll_interval)
 
 
 def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
@@ -74,13 +79,13 @@ def main() -> None:
     parser.add_argument("--poll-interval",type = float,default=1.0)
     args = parser.parse_args()
     
-    logging.info("worker started")
+    logger.info("worker started")
 
     def request_stop(signum: int, _: object) -> None:
         if stop.is_set():
-            logging.warning("second signal received, exiting immediately")
+            logger.warning("second signal received, exiting immediately")
             raise SystemExit(1)
-        logging.info("received signal %s, finishing current job", signum)
+        logger.info("received signal %s, finishing current job", signum)
         stop.set()
 
     signal.signal(signal.SIGINT, request_stop)

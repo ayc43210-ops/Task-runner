@@ -7,7 +7,7 @@ import pytest
 from task_runner.database import get_connection, initialize_database
 from task_runner.handler import Handler
 from task_runner.jobs import claim_job, get_job, mark_completed, submit_job
-from task_runner.worker import process_one,run_worker,wait_until
+from task_runner.worker import process_one, run_worker, wait_until
 
 
 @pytest.fixture
