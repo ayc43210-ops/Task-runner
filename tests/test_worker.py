@@ -7,9 +7,8 @@ import pytest
 from task_runner.database import get_connection, initialize_database
 from task_runner.handler import Handler
 from task_runner.jobs import claim_job, get_job, mark_completed, submit_job
-
-from task_runner.worker import process_one, run_worker, wait_until
 from task_runner.retry import MAX_ATTEMPTS
+from task_runner.worker import process_one, run_worker, wait_until
 
 
 @pytest.fixture
@@ -165,3 +164,51 @@ def test_job_fails_permanently_after_max_attempts(
 
     # nothing left to do
     assert process_one(registry, db_path=db_path) is False
+    
+
+def test_abandoned_job_is_recoverd_and_completed(db_path: Path)->None:
+    job_id = submit_job("job",{},db_path)
+    row = claim_job(db_path)
+    
+    assert row is not None
+    
+    assert row is not None
+    assert row["status"] == "running"
+    assert row["attempts"] == 1
+    assert row["lease_expires_at"] is not None
+    
+    with get_connection(db_path) as conn:
+        conn.execute("""
+                UPDATE jobs SET lease_expires_at = datetime('now','-1 minute')
+                WHERE id = ? AND status = 'running'
+            """,(job_id,)
+        )
+        
+    stop = threading.Event()
+    t = threading.Thread(
+            target=run_worker,
+            args=({"job": lambda p: {}}, stop, db_path, 0.05,0.1),
+        )
+    t.start()
+    
+    def cond()->bool:
+        current = get_job(job_id,db_path)
+        return current is not None and current["status"]=="completed"
+    try:
+        wait_until(cond)
+    finally:
+        stop.set()
+    t.join(timeout=5)
+    assert not t.is_alive()
+    
+    job = get_job(job_id,db_path)
+    assert job is not None
+        
+    
+    assert job["attempts"] == 2
+    assert job["last_error"] is None
+    assert job["lease_expires_at"] is None
+    assert job["status"] == "completed"
+    
+    
+    

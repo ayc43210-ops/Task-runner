@@ -1,5 +1,6 @@
 import time
 from collections.abc import Callable
+
 from task_runner.retry import PermanentError
 
 type Handler = Callable[[dict], dict]

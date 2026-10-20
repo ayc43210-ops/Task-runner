@@ -1,5 +1,4 @@
 import json
-
 from pathlib import Path
 
 from task_runner.database import DB_PATH, get_connection

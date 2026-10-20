@@ -5,8 +5,13 @@ from pathlib import Path
 import pytest
 
 from task_runner.database import get_connection, initialize_database
-from task_runner.jobs import claim_job, get_job, submit_job,mark_retry,recover_expired_leases
-from task_runner.retry import backoff_delay
+from task_runner.jobs import (
+    claim_job,
+    get_job,
+    mark_retry,
+    recover_expired_leases,
+    submit_job,
+)
 
 
 @pytest.fixture
@@ -172,3 +177,5 @@ def test_recovery_fails(db_path:Path)->None:
     assert job["last_error"] == "LeaseExpired: worker did not finish in time"
     
     assert claim_job(db_path) is None
+
+    

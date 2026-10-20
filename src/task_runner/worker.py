@@ -8,8 +8,15 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from task_runner.handler import REGISTRY, Handler
-from task_runner.jobs import DB_PATH, claim_job, mark_completed, mark_failed,mark_retry,recover_expired_leases
-from task_runner.retry import backoff_delay,MAX_ATTEMPTS,PermanentError
+from task_runner.jobs import (
+    DB_PATH,
+    claim_job,
+    mark_completed,
+    mark_failed,
+    mark_retry,
+    recover_expired_leases,
+)
+from task_runner.retry import MAX_ATTEMPTS, PermanentError, backoff_delay
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +44,8 @@ def process_one(registry: Mapping[str, Handler], db_path: Path = DB_PATH) -> boo
         result = handler(json.loads(job["payload"]))
         try:
             result_json = json.dumps(result)
-        except TypeError as exc:
-            raise PermanentError(f"result is not JSON-serializable")
+        except TypeError:
+            raise PermanentError("result is not JSON-serializable")
 
     except Exception as exc:  # noqa: BLE001 - handlers may raise anything; record and continue
         error = f"{type(exc).__name__}: {exc}"
