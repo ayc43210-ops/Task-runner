@@ -1,4 +1,5 @@
 import json
+
 from pathlib import Path
 
 from task_runner.database import DB_PATH, get_connection
@@ -101,3 +102,29 @@ def mark_retry(
             (f"+{delay_seconds} seconds", error, job_id, attempts),
         )
         return cursor.rowcount == 1
+
+def recover_expired_leases(max_attempts: int,db_path: Path = DB_PATH)->int:
+    with get_connection(db_path) as conn:
+
+        cursor1 = conn.execute("""
+            UPDATE jobs
+            SET status = 'failed',
+                last_error = 'LeaseExpired: worker did not finish in time',
+                lease_expires_at = NULL
+            WHERE status = 'running' AND lease_expires_at <= CURRENT_TIMESTAMP AND attempts >= ?
+            """,
+            (max_attempts,)
+        )
+        cursor2 = conn.execute("""
+            UPDATE jobs
+            SET status = 'pending',
+                last_error = 'LeaseExpired: worker did not finish in time',
+                run_at = CURRENT_TIMESTAMP,
+                lease_expires_at = NULL
+            WHERE status = 'running' AND lease_expires_at <= CURRENT_TIMESTAMP AND attempts <  ?
+            """,
+            (max_attempts,)
+                )
+
+        return cursor1.rowcount + cursor2.rowcount
+    

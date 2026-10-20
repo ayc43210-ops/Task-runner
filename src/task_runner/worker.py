@@ -84,6 +84,7 @@ def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
         time.sleep(0.02)
     raise AssertionError("condition not met before timeout")
 
+
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO,

@@ -9,6 +9,7 @@ from task_runner.handler import Handler
 from task_runner.jobs import claim_job, get_job, mark_completed, submit_job
 
 from task_runner.worker import process_one, run_worker, wait_until
+from task_runner.retry import MAX_ATTEMPTS
 
 
 @pytest.fixture
@@ -140,3 +141,27 @@ def test_worker_survives_unexpected_error( monkeypatch: pytest.MonkeyPatch, db_p
     run_worker({}, stop, db_path=db_path, poll_interval=0.01)
 
     assert len(calls) == 2
+
+
+def test_job_fails_permanently_after_max_attempts(
+    monkeypatch: pytest.MonkeyPatch, db_path: Path
+) -> None:
+    monkeypatch.setattr("task_runner.worker.backoff_delay", lambda attempts: 0)
+
+    def always_fails(payload: dict) -> dict:
+        raise RuntimeError("nope")
+
+    registry: dict[str, Handler] = {"flaky": always_fails}
+    job_id = submit_job("flaky", {}, db_path=db_path)
+
+    for _ in range(MAX_ATTEMPTS):
+        assert process_one(registry, db_path=db_path) is True
+
+    job = get_job(job_id, db_path=db_path)
+    assert job is not None
+    assert job["status"] == "failed"
+    assert job["attempts"] == MAX_ATTEMPTS
+    assert job["last_error"] == "RuntimeError: nope"
+
+    # nothing left to do
+    assert process_one(registry, db_path=db_path) is False

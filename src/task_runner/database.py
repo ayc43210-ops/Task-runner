@@ -19,6 +19,7 @@ def get_connection(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:
 
 def initialize_database(db_path: Path = DB_PATH) -> None:
     with get_connection(db_path) as conn:
+        conn.execute("""PRAGMA journal_mode=WAL;""")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS jobs (
                 id INTEGER PRIMARY KEY,
