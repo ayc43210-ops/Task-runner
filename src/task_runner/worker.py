@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from task_runner.handler import REGISTRY, Handler
-from task_runner.jobs import DB_PATH, claim_job, mark_completed, mark_failed,mark_retry
+from task_runner.jobs import DB_PATH, claim_job, mark_completed, mark_failed,mark_retry,recover_expired_leases
 from task_runner.retry import backoff_delay,MAX_ATTEMPTS,PermanentError
 
 logger = logging.getLogger(__name__)
@@ -65,10 +65,18 @@ def run_worker(
         stop: threading.Event,
         db_path: Path = DB_PATH,
         poll_interval: float = 1.0,
+        recovery_interval: float = 10.0
     )->None:
+       last_check = time.monotonic()
        while not stop.is_set():
         try:
             did_work = process_one(registry, db_path)
+            now = time.monotonic()
+            if now - last_check >= recovery_interval:
+                last_recovered = recover_expired_leases(MAX_ATTEMPTS,db_path)
+                last_check = float("-inf")
+                if last_recovered > 0:
+                    logger.info("%s jobs recovered",last_recovered)
         except Exception:
             logger.exception("process_one crashed; backing off")
             did_work = False

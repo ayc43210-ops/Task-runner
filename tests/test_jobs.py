@@ -140,7 +140,35 @@ def test_recovery_lease(db_path: Path)->None:
     assert row is not None
     assert row["attempts"] == 2
 
-
-
-
-
+def test_recovery_fails(db_path:Path)->None:
+    job_id = submit_job("job",{},db_path)
+    job = get_job(job_id,db_path)
+    row = claim_job(db_path)
+    
+    assert row is not None
+    
+    assert row is not None
+    assert row["status"] == "running"
+    assert row["attempts"] == 1
+    assert row["lease_expires_at"] is not None
+        
+    
+    
+    with get_connection(db_path) as conn:
+        conn.execute("""
+                UPDATE jobs SET lease_expires_at = datetime('now','-1 minute')
+                WHERE id = ? AND status = 'running'
+            """,(job_id,))
+    
+    recovered_jobs = recover_expired_leases(max_attempts=1,db_path=db_path)
+    
+    assert recovered_jobs == 1
+    
+    job = get_job(job_id,db_path=db_path)
+    
+    assert job is not None
+    assert job["status"] == "failed"
+    assert job["lease_expires_at"] is None
+    assert job["last_error"] == "LeaseExpired: worker did not finish in time"
+    
+    assert claim_job(db_path) is None
