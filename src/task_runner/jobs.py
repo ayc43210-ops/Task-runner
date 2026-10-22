@@ -127,3 +127,13 @@ def recover_expired_leases(max_attempts: int,db_path: Path = DB_PATH)->int:
 
         return cursor1.rowcount + cursor2.rowcount
     
+def renew_lease(job_id: int,attempts : int,lease_seconds: float,db_path:Path)->bool:
+    with get_connection(db_path) as conn:
+        cursor = conn.execute("""
+                    UPDATE jobs SET
+                        lease_expires_at = datetime('now', ?)
+                        WHERE id = ? AND status = 'running' AND attempts = ?
+                    """,(f"+{lease_seconds} seconds",job_id,attempts))
+    return (cursor.rowcount==1)
+
+    

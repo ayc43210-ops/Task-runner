@@ -11,10 +11,10 @@ def get_connection(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
-        with conn:  # commits on success, rolls back on exception
+        with conn: 
             yield conn
     finally:
-        conn.close()  # `with conn` alone does NOT do this
+        conn.close() 
 
 
 def initialize_database(db_path: Path = DB_PATH) -> None:

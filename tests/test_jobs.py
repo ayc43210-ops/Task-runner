@@ -10,6 +10,7 @@ from task_runner.jobs import (
     get_job,
     mark_retry,
     recover_expired_leases,
+    renew_lease,
     submit_job,
 )
 
@@ -177,5 +178,33 @@ def test_recovery_fails(db_path:Path)->None:
     assert job["last_error"] == "LeaseExpired: worker did not finish in time"
     
     assert claim_job(db_path) is None
+    
+def test_renew_lease(db_path:Path)->None:
+    job_id = submit_job("job",{},db_path)
+    row = claim_job(db_path)
+    
+    assert row is not None
+    assert row["status"] == "running"
+    assert row["attempts"] == 1
+    
+    assert(renew_lease(job_id,row["attempts"],120,db_path) is True)
+    
+    
+    job = get_job(job_id,db_path)
+    
+    assert job is not None
+    assert job["lease_expires_at"] > row["lease_expires_at"]  
+    
+    assert (renew_lease(job_id,5,10,db_path) is False)
+    
+    job2 = get_job(job_id,db_path)
+    
+    assert job2 is not None
+    assert job2["lease_expires_at"] == job["lease_expires_at"]
+
+    
+    
+    
+    
 
     
