@@ -32,14 +32,13 @@ def run_heartbeat(
     while not stop.wait(interval):
         try:
             ok = renew_lease(job_id, attempts, lease_seconds, db_path=db_path)
-        except Exception:  # noqa: BLE001 - one failed beat must not end the heartbeat
+        except Exception:
             logger.exception("heartbeat failed for job %s; will try again", job_id)
             continue
         if not ok:
             logger.warning("job %s no longer running under this attempt; heartbeat stopping", job_id)
             return
 
-import threading
 # keep your other imports; add PermanentError and run_heartbeat is in this file
 
 def process_one(
@@ -151,7 +150,14 @@ def main() -> None:
     signal.signal(signal.SIGINT, request_stop)
     signal.signal(signal.SIGTERM, request_stop)
 
-    run_worker(REGISTRY, stop, db_path=DB_PATH, poll_interval = args.poll_interval,recovery_interval=args.recovery_interval,lease_seconds=args.lease_seconds,)
+    run_worker(
+        REGISTRY,
+        stop,
+        db_path=args.db_path,
+        poll_interval=args.poll_interval,
+        recovery_interval=args.recovery_interval,
+        lease_seconds=args.lease_seconds,
+    )
 
 
 if __name__ == "__main__":

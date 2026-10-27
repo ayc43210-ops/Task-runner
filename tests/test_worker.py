@@ -1,16 +1,22 @@
 import json
 import threading
 import time
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from task_runner.database import get_connection, initialize_database
 from task_runner.handler import Handler
-from task_runner.jobs import claim_job, get_job, mark_completed, submit_job,recover_expired_leases
+from task_runner.jobs import (
+    claim_job,
+    get_job,
+    mark_completed,
+    recover_expired_leases,
+    submit_job,
+)
 from task_runner.retry import MAX_ATTEMPTS
 from task_runner.worker import process_one, run_heartbeat, run_worker
+from tests.helpers import wait_until
 
 
 @pytest.fixture
@@ -20,13 +26,6 @@ def db_path(tmp_path: Path) -> Path:
     return path
 
 
-def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if condition():
-            return
-        time.sleep(0.02)
-    raise AssertionError("condition not met before timeout")
 
 
 
