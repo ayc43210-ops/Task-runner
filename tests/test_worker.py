@@ -140,7 +140,7 @@ def test_worker_survives_unexpected_error( monkeypatch: pytest.MonkeyPatch, db_p
     calls: list[int] = []
     stop = threading.Event()
 
-    def fake_process_one(registry: object, path: Path) -> bool:
+    def fake_process_one(registry: object, path: Path,lease_seconds: float = 30.0) -> bool:
         calls.append(1)
         if len(calls) == 1:
             raise RuntimeError("database exploded")

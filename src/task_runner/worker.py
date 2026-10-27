@@ -104,12 +104,14 @@ def run_worker(
         stop: threading.Event,
         db_path: Path = DB_PATH,
         poll_interval: float = 1.0,
-        recovery_interval: float = 10.0
+        recovery_interval: float = 10.0,
+        lease_seconds: float = 30.0,
+        
     )->None:
        last_check = time.monotonic()
        while not stop.is_set():
         try:
-            did_work = process_one(registry, db_path)
+            did_work = process_one(registry, db_path,lease_seconds)
             now = time.monotonic()
             if now - last_check >= recovery_interval:
                 last_recovered = recover_expired_leases(MAX_ATTEMPTS,db_path)
@@ -132,6 +134,9 @@ def main() -> None:
     stop = threading.Event()
     parser = argparse.ArgumentParser()
     parser.add_argument("--poll-interval",type = float,default=1.0)
+    parser.add_argument("--db-path", type=Path, default=DB_PATH)
+    parser.add_argument("--lease-seconds", type=float, default=30.0)
+    parser.add_argument("--recovery-interval", type=float, default=10.0)
     args = parser.parse_args()
     
     logger.info("worker started")
@@ -146,7 +151,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, request_stop)
     signal.signal(signal.SIGTERM, request_stop)
 
-    run_worker(REGISTRY, stop, db_path=DB_PATH, poll_interval = args.poll_interval)
+    run_worker(REGISTRY, stop, db_path=DB_PATH, poll_interval = args.poll_interval,recovery_interval=args.recovery_interval,lease_seconds=args.lease_seconds,)
 
 
 if __name__ == "__main__":
