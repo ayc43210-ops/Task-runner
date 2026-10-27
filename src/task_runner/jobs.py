@@ -28,7 +28,7 @@ def get_job(job_id: int, db_path: Path = DB_PATH) -> dict | None:
     return dict(row) if row else None
 
 
-def claim_job(db_path: Path = DB_PATH, lease_seconds: int = 30) -> dict | None:
+def claim_job(db_path: Path = DB_PATH, lease_seconds: float = 30) -> dict | None:
     """Atomically claim the oldest eligible pending job, or return None."""
     with get_connection(db_path) as conn:
         row = conn.execute(

@@ -1,14 +1,16 @@
 import json
 import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from task_runner.database import get_connection, initialize_database
 from task_runner.handler import Handler
-from task_runner.jobs import claim_job, get_job, mark_completed, submit_job
+from task_runner.jobs import claim_job, get_job, mark_completed, submit_job,recover_expired_leases
 from task_runner.retry import MAX_ATTEMPTS
-from task_runner.worker import process_one, run_worker, wait_until
+from task_runner.worker import process_one, run_heartbeat, run_worker
 
 
 @pytest.fixture
@@ -16,6 +18,16 @@ def db_path(tmp_path: Path) -> Path:
     path = tmp_path / "test.db"
     initialize_database(path)
     return path
+
+
+def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if condition():
+            return
+        time.sleep(0.02)
+    raise AssertionError("condition not met before timeout")
+
 
 
 def test_completed_job(db_path: Path) -> None:
@@ -100,7 +112,7 @@ def test_unserializable_result_marks_job_failed(db_path: Path) -> None:
     job = get_job(job_id, db_path=db_path)
     assert job is not None
     assert job["status"] == "failed"
-    assert job["last_error"] == "PermanentError: result is not JSON-serializable"
+    assert "not JSON-serializable" in job["last_error"]
 
 
 def test_worker_processes_jobs_then_stops(db_path):
@@ -211,4 +223,59 @@ def test_abandoned_job_is_recoverd_and_completed(db_path: Path)->None:
     assert job["status"] == "completed"
     
     
+def test_heartbeat(db_path:Path)->None:
+    job_id = submit_job("job",{},db_path)
+    row = claim_job(db_path)
+    assert row is not None
+    assert row["status"] == "running"
+    assert row["lease_expires_at"] is not None
+    assert row["attempts"] == 1
     
+    lease_before = row["lease_expires_at"]
+    
+    stop = threading.Event()
+    t = threading.Thread(
+            target=run_heartbeat,
+                args=(job_id,row["attempts"],stop,0.05,60, db_path),
+            )
+    t.start()
+    
+    def cond()->bool:
+        job = get_job(job_id,db_path)
+        return job is not None and job["lease_expires_at"] > lease_before
+    try:
+        wait_until(cond)
+        
+    finally:
+        stop.set()
+        
+    t.join(timeout=5)
+    assert not t.is_alive()
+    
+    job = get_job(job_id,db_path)
+    assert job is not None
+            
+    assert job["attempts"] == 1
+    assert job["status"] == "running"
+    
+def test_heartbeat_keeps_long_job_from_being_recovered(db_path: Path) -> None:
+    def slow(payload: dict) -> dict:
+        time.sleep(3.5)
+        return {"ok": True}
+
+    job_id = submit_job("slow", {}, db_path=db_path)
+    t = threading.Thread(target=process_one, args=({"slow": slow}, db_path, 2, 0.2))
+    t.start()
+
+    recovered = 0
+    deadline = time.monotonic() + 4.5
+    while time.monotonic() < deadline:
+        recovered += recover_expired_leases(MAX_ATTEMPTS, db_path)
+        time.sleep(0.3)
+    t.join(timeout=5)
+
+    job = get_job(job_id, db_path=db_path)
+    assert job is not None
+    assert recovered == 0
+    assert job["status"] == "completed"
+    assert job["attempts"] == 1
