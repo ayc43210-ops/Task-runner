@@ -69,7 +69,7 @@ def test_crash_recovery(db_path:Path)->None:
     
 
 def test_crash_causes_duplicate_side_effect(tmp_path: Path,db_path:Path)->None:
-    job_id = submit_job("write_to_file",{"path": "file.txt","line":"yo!"},db_path)
+    job_id = submit_job("write_to_file",{"path": "file.txt","line":"yo!","request_id":"abcd123"},db_path)
 
     proc = subprocess.Popen(
         [sys.executable, "-m", "task_runner.worker",
@@ -115,7 +115,7 @@ def test_crash_causes_duplicate_side_effect(tmp_path: Path,db_path:Path)->None:
     
     job  = get_job(job_id,db_path)
     assert job is not None
-    assert len(file.read_text().splitlines()) == 2
+    assert len(file.read_text().splitlines()) == 1
     assert job["attempts"] == 2
     
     assert job["last_error"] is None
