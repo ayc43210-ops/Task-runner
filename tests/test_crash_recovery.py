@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import os
 from pathlib import Path
 
 import pytest
@@ -66,3 +67,57 @@ def test_crash_recovery(db_path:Path)->None:
     assert job["last_error"] is None
     
     
+
+def test_crash_causes_duplicate_side_effect(tmp_path: Path,db_path:Path)->None:
+    job_id = submit_job("write_to_file",{"path": "file.txt","line":"yo!"},db_path)
+
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "task_runner.worker",
+        "--db-path", str(db_path),
+        "--lease-seconds", "2",
+        "--recovery-interval", "0.5",
+        "--poll-interval", "0.1"],
+        env={**os.environ, "DEMO_DIR": str(tmp_path)},
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    
+    file = tmp_path / "file.txt"
+    
+    def wrote_once()->bool:
+        return file.exists() and len(file.read_text().splitlines()) == 1
+    
+    def ended()->bool:
+        job = get_job(job_id,db_path)
+        return job is not None and job["status"]=="completed"
+        
+    try:
+        wait_until(wrote_once)
+        
+    finally:
+        proc.kill()
+        proc.wait()
+    proc2 = subprocess.Popen(
+                [sys.executable, "-m", "task_runner.worker",
+                "--db-path", str(db_path),
+                "--lease-seconds", "2",
+                "--recovery-interval", "0.5",
+                "--poll-interval", "0.1"],
+                env={**os.environ, "DEMO_DIR": str(tmp_path)},
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+        )
+    try:
+        wait_until(ended,timeout=20)
+    finally:
+        proc2.kill()
+        proc2.wait()
+    
+    job  = get_job(job_id,db_path)
+    assert job is not None
+    assert len(file.read_text().splitlines()) == 2
+    assert job["attempts"] == 2
+    
+    assert job["last_error"] is None
+    
+   
