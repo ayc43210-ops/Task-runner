@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers import count_jobs
 from task_runner.database import get_connection, initialize_database
 from task_runner.jobs import (
     claim_job,
@@ -202,5 +203,35 @@ def test_renew_lease(db_path:Path)->None:
     assert job2 is not None
     assert job2["lease_expires_at"] == job["lease_expires_at"]
 
-    
-    
+
+def test_same_key_returns_same_job(db_path: Path) -> None:
+    first = submit_job("a", {"x": 1}, db_path, idempotency_key="k1")
+    second = submit_job("a", {"x": 1}, db_path, idempotency_key="k1")
+
+    assert first == second
+    assert count_jobs(db_path) == 1
+
+
+def test_different_key_creates_new_job(db_path: Path) -> None:
+    first = submit_job("a", {"x": 1}, db_path, idempotency_key="k1")
+    second = submit_job("a", {"x": 1}, db_path, idempotency_key="k2")
+
+    assert first != second
+    assert count_jobs(db_path) == 2
+
+
+def test_no_key_never_collides(db_path: Path) -> None:
+    first = submit_job("a", {"x": 1}, db_path)
+    second = submit_job("a", {"x": 1}, db_path)
+
+    assert first != second
+    assert count_jobs(db_path) == 2
+
+
+def test_same_key_different_payload_is_an_error(db_path: Path) -> None:
+    submit_job("a", {"x": 1}, db_path, idempotency_key="k1")
+
+    with pytest.raises(ValueError):
+        submit_job("a", {"x": 2}, db_path, idempotency_key="k1")
+
+    assert count_jobs(db_path) == 1

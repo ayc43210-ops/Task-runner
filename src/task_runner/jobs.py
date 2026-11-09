@@ -1,25 +1,52 @@
 import json
+import sqlite3
+import logging
 from pathlib import Path
 
 from task_runner.database import DB_PATH, get_connection
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger(__name__)  # near the top of jobs.py if it isn't there
 
-def submit_job(job_type: str, payload: dict, db_path: Path = DB_PATH) -> int:
+
+def submit_job(
+    job_type: str,
+    payload: dict,
+    db_path: Path = DB_PATH,
+    idempotency_key: str | None = None,
+) -> int:
     payload_json = json.dumps(payload)
 
     with get_connection(db_path) as conn:
-        cursor = conn.execute(
-            "INSERT INTO jobs (type, payload) VALUES (?, ?)",
-            (job_type, payload_json),
-        )
+        try:
+            cursor = conn.execute(
+                "INSERT INTO jobs (type, payload, idempotency_key) VALUES (?, ?, ?)",
+                (job_type, payload_json, idempotency_key),
+            )
+        except sqlite3.IntegrityError:
+            if idempotency_key is None:
+                raise  # some other constraint failed, not a duplicate key
+            row = conn.execute(
+                "SELECT id, type, payload FROM jobs WHERE idempotency_key = ?",
+                (idempotency_key,),
+            ).fetchone()
+            if row is None:
+                raise
+            if row["type"] != job_type or json.loads(row["payload"]) != payload:
+                raise ValueError(
+                    "idempotency key already used with a different type or payload"
+                ) from None
+            logger.info("job already exists for key %s (id %s)", idempotency_key, row["id"])
+            return row["id"]
+
         job_id = cursor.lastrowid
         if job_id is None:
-            raise RuntimeError(
-                "Failed to retrieve the id of the submitted job"
-            )  # pragm : no cover
+            raise RuntimeError("Failed to retrieve the id of the submitted job")
 
     return job_id
-
 
 def get_job(job_id: int, db_path: Path = DB_PATH) -> dict | None:
     with get_connection(db_path) as conn:
