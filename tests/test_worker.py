@@ -278,3 +278,26 @@ def test_heartbeat_keeps_long_job_from_being_recovered(db_path: Path) -> None:
     assert recovered == 0
     assert job["status"] == "completed"
     assert job["attempts"] == 1
+    
+def test_housekeeping_runs_on_a_timer(
+    monkeypatch: pytest.MonkeyPatch, db_path: Path
+) -> None:
+    calls: list[int] = []
+
+    def fake_recover(max_attempts: int, path: Path) -> int:
+        calls.append(1)
+        return 0
+
+    monkeypatch.setattr("task_runner.worker.recover_expired_leases", fake_recover)
+
+    stop = threading.Event()
+    t = threading.Thread(
+        target=run_worker,
+        args=({}, stop, db_path, 0.01, 60.0),  # poll 0.01s, recovery every 60s
+    )
+    t.start()
+    time.sleep(0.5)  # a sleep is fine here: we're proving something did NOT happen again
+    stop.set()
+    t.join(timeout=5)
+
+    assert len(calls) == 1  # once at startup, not on every loop pass

@@ -164,3 +164,8 @@ def renew_lease(job_id: int,attempts : int,lease_seconds: float,db_path:Path)->b
     return (cursor.rowcount==1)
 
     
+def expire_idempotency_keys(db_path:Path,key_ttl_hours:float = 24.0)->int:
+    with get_connection(db_path) as conn:
+        cursor = conn.execute("UPDATE jobs SET idempotency_key = NULL WHERE status IN ('completed','failed') AND created_at < datetime('now',?)",(f"-{key_ttl_hours} hours",))
+    return cursor.rowcount
+    

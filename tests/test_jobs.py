@@ -13,6 +13,7 @@ from task_runner.jobs import (
     recover_expired_leases,
     renew_lease,
     submit_job,
+    expire_idempotency_keys,
 )
 
 
@@ -235,3 +236,32 @@ def test_same_key_different_payload_is_an_error(db_path: Path) -> None:
         submit_job("a", {"x": 2}, db_path, idempotency_key="k1")
 
     assert count_jobs(db_path) == 1
+    
+def test_completed_or_failed_jobs_idempotency_key_get_expired(db_path:Path)->None:
+    job_id = submit_job("job",{},db_path,idempotency_key="k1")
+    
+    with get_connection(db_path) as conn:
+        conn.execute("UPDATE jobs SET created_at = datetime('now' ,'-48 hours') , status = 'completed' WHERE id = ?",(job_id,))
+        
+    assert expire_idempotency_keys(db_path) == 1
+    job = get_job(job_id,db_path)
+    
+    assert job is not None
+    assert job["status"] == "completed"
+    assert job["idempotency_key"] is None
+    
+    new_id = submit_job("job",{},db_path,idempotency_key="k1")
+    assert new_id != job_id
+    
+def test_pending_or_running_jobs_idempotency_keys_dont_expire(db_path:Path)->None:
+    job_id = submit_job("job",{},db_path,idempotency_key="k1")
+        
+    with get_connection(db_path) as conn:
+            conn.execute("UPDATE jobs SET created_at = datetime('now' ,'-48 hours') , status = 'pending' WHERE id = ?",(job_id,))
+            
+    assert expire_idempotency_keys(db_path) == 0
+    job = get_job(job_id,db_path)
+        
+    assert job is not None
+    assert job["idempotency_key"] == 'k1'
+        

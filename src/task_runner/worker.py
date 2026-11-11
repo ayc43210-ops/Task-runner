@@ -16,6 +16,7 @@ from task_runner.jobs import (
     mark_retry,
     recover_expired_leases,
     renew_lease,
+    expire_idempotency_keys,
 )
 from task_runner.retry import MAX_ATTEMPTS, PermanentError, backoff_delay
 
@@ -39,13 +40,14 @@ def run_heartbeat(
             logger.warning("job %s no longer running under this attempt; heartbeat stopping", job_id)
             return
 
-# keep your other imports; add PermanentError and run_heartbeat is in this file
+# keep the other imports; add PermanentError and run_heartbeat is in this file
 
 def process_one(
     registry: Mapping[str, Handler],
     db_path: Path = DB_PATH,
     lease_seconds: float = 30.0,
     heartbeat_interval: float | None = None,
+   
 ) -> bool:
     """Claim and run one job. Returns False if the queue was empty."""
     job = claim_job(db_path=db_path, lease_seconds=lease_seconds)
@@ -105,24 +107,34 @@ def run_worker(
         poll_interval: float = 1.0,
         recovery_interval: float = 10.0,
         lease_seconds: float = 30.0,
+        key_expiry_interval: float = 3600.0,
+        key_ttl_hours: float = 24.0,
         
     )->None:
-       last_check = time.monotonic()
-       while not stop.is_set():
+    
+    last_recovery = float("-inf")
+    last_key_expiry = float("-inf")
+    while not stop.is_set():
         try:
-            did_work = process_one(registry, db_path,lease_seconds)
+            did_work = process_one(registry, db_path, lease_seconds)
             now = time.monotonic()
-            if now - last_check >= recovery_interval:
-                last_recovered = recover_expired_leases(MAX_ATTEMPTS,db_path)
-                last_check = float("-inf")
-                if last_recovered > 0:
-                    logger.info("%s jobs recovered",last_recovered)
-        except Exception:
-            logger.exception("process_one crashed; backing off")
+
+            if now - last_recovery >= recovery_interval:
+                recovered = recover_expired_leases(MAX_ATTEMPTS, db_path)
+                last_recovery = now
+                if recovered > 0:
+                    logger.info("%s jobs recovered", recovered)
+
+            if now - last_key_expiry >= key_expiry_interval:
+                expired = expire_idempotency_keys(db_path, key_ttl_hours)
+                last_key_expiry = now
+                if expired > 0:
+                    logger.info("%s idempotency keys expired", expired)
+        except Exception:  # noqa: BLE001
+            logger.exception("worker loop crashed; backing off")
             did_work = False
         if not did_work:
             stop.wait(poll_interval)
-
 
 def main() -> None:
     logging.basicConfig(
@@ -136,6 +148,7 @@ def main() -> None:
     parser.add_argument("--db-path", type=Path, default=DB_PATH)
     parser.add_argument("--lease-seconds", type=float, default=30.0)
     parser.add_argument("--recovery-interval", type=float, default=10.0)
+    parser.add_argument("--idempotency-ttl-hours", type=int, default=24)
     args = parser.parse_args()
     
     logger.info("worker started")
@@ -157,6 +170,7 @@ def main() -> None:
         poll_interval=args.poll_interval,
         recovery_interval=args.recovery_interval,
         lease_seconds=args.lease_seconds,
+        key_ttl_hours=args.idempotency_ttl_hours,
     )
 
 
