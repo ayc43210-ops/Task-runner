@@ -85,18 +85,24 @@ def process_one(
     except Exception as exc:  # noqa: BLE001 - handlers may raise anything; record and continue
         error = f"{type(exc).__name__}: {exc}"
         if isinstance(exc, PermanentError) or attempts >= MAX_ATTEMPTS:
-            mark_failed(job_id, attempts, error, db_path)
-            logger.error("Job %s failed permanently: %s", job_id, error)
+            if mark_failed(job_id, attempts, error, db_path):
+                logger.error("Job %s failed permanently: %s", job_id, error)
+            else:
+                logger.warning("Job %s failed, but this attempt no longer owns it.failure dropped",job_id,)
         else:
             delay = backoff_delay(attempts)
-            mark_retry(job_id, attempts, error, delay, db_path)
-            logger.warning(
-                "Job %s failed (attempt %s of %s), retrying in %ss: %s",
-                job_id, attempts, MAX_ATTEMPTS, delay, error,
-            )
+            if mark_retry(job_id, attempts, error, delay, db_path):
+                logger.warning(
+                    "Job %s failed (attempt %s of %s), retrying in %ss: %s",
+                    job_id, attempts, MAX_ATTEMPTS, delay, error,
+                )
+            else:
+                logger.warning("job %s failed, but this attempt no longer claims it; retry dropped",job_id)
     else:
-        mark_completed(job_id, attempts, result_json, db_path)
-        logger.info("Job %s completed", job_id)
+        if mark_completed(job_id, attempts, result_json, db_path):
+            logger.info("Job %s completed", job_id)
+        else:
+            logger.warning("Job %s finished, but this attempt no longer owns it; result dropped",job_id)
 
     return True
 
