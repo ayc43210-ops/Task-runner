@@ -144,7 +144,7 @@ def recover_expired_leases(max_attempts: int,db_path: Path = DB_PATH)->int:
         cursor2 = conn.execute("""
             UPDATE jobs
             SET status = 'pending',
-                last_error = 'LeaseExpired: worker did not finish in time',
+                last_error  = 'LeaseExpired: worker did not finish in time',
                 run_at = CURRENT_TIMESTAMP,
                 lease_expires_at = NULL
             WHERE status = 'running' AND lease_expires_at <= CURRENT_TIMESTAMP AND attempts <  ?
