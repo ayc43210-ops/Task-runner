@@ -51,9 +51,15 @@ def submit_job(
 def get_job(job_id: int, db_path: Path = DB_PATH) -> dict | None:
     with get_connection(db_path) as conn:
         row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-
-    return dict(row) if row else None
-
+    if row is None:
+        return None
+    
+    row_dict = dict(row)
+    row_dict["payload"] = json.loads(row["payload"])
+    if row["result"] is not None:
+        row_dict["result"] = json.loads(row["result"])
+    return row_dict
+   
 
 def claim_job(db_path: Path = DB_PATH, lease_seconds: float = 30) -> dict | None:
     """Atomically claim the oldest eligible pending job, or return None."""

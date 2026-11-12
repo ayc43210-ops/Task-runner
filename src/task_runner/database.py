@@ -3,8 +3,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent / "jobData.db"
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 
+DATA_DIR = ROOT_DIR / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# Point DB_PATH inside the data folder
+DB_PATH = DATA_DIR / "jobs.db"
 
 @contextmanager
 def get_connection(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:

@@ -265,3 +265,82 @@ def test_pending_or_running_jobs_idempotency_keys_dont_expire(db_path:Path)->Non
     assert job is not None
     assert job["idempotency_key"] == 'k1'
         
+def test_get_job_decodes_payload(db_path):
+    job_id = submit_job(
+        "sleep",
+        {"seconds": 5},
+        db_path=db_path
+    )
+
+    job = get_job(job_id, db_path)
+
+    assert job is not None
+    assert job["payload"] == {"seconds": 5}
+    assert isinstance(job["payload"], dict)
+
+
+def test_get_pending_job_result_is_none(db_path):
+    job_id = submit_job(
+        "sleep",
+        {"seconds": 5},
+        db_path=db_path
+    )
+
+    job = get_job(job_id, db_path)
+
+    assert job is not None
+    assert job["result"] is None
+
+
+def test_get_completed_job_decodes_result(db_path):
+    job_id = submit_job(
+        "sleep",
+        {"seconds": 5},
+        db_path=db_path
+    )
+
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE jobs
+            SET status = 'completed', result = ?
+            WHERE id = ?
+            """,
+            ('{"message": "done"}', job_id)
+        )
+
+    job = get_job(job_id, db_path)
+
+    assert job is not None
+    assert job["result"] == {"message": "done"}
+    assert isinstance(job["result"], dict)
+
+
+def test_get_job_decodes_empty_result(db_path):
+    job_id = submit_job(
+        "sleep",
+        {"seconds": 5},
+        db_path=db_path
+    )
+
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE jobs
+            SET status = 'completed', result = ?
+            WHERE id = ?
+            """,
+            ("{}", job_id)
+        )
+
+    job = get_job(job_id, db_path)
+
+    assert job is not None
+    assert job["result"] == {}
+    assert isinstance(job["result"], dict)
+
+
+def test_get_nonexistent_job_returns_none(db_path):
+    job = get_job(999999, db_path)
+
+    assert job is None

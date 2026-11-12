@@ -7,6 +7,7 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 
+from task_runner.database import initialize_database
 from task_runner.handler import REGISTRY, Handler
 from task_runner.jobs import (
     DB_PATH,
@@ -156,6 +157,8 @@ def main() -> None:
     parser.add_argument("--recovery-interval", type=float, default=10.0)
     parser.add_argument("--idempotency-ttl-hours", type=int, default=24)
     args = parser.parse_args()
+    
+    initialize_database(args.db_path)
     
     logger.info("worker started")
 

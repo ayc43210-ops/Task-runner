@@ -27,8 +27,6 @@ def db_path(tmp_path: Path) -> Path:
 
 
 
-
-
 def test_completed_job(db_path: Path) -> None:
     registry = {"ok": lambda payload: {"done": True}}
     job_id = submit_job("ok", {}, db_path)
@@ -38,7 +36,7 @@ def test_completed_job(db_path: Path) -> None:
     assert job is not None
     assert job["status"] == "completed"
 
-    assert json.loads(job["result"]) == {"done": True}
+    assert (job["result"]) == {"done": True}
     assert job["last_error"] is None
 
 

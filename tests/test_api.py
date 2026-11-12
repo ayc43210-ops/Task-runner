@@ -89,9 +89,9 @@ def test_same_key_different_type_or_payload_raises_error(client):
         
     assert res1.status_code == 201
         
-        
     res2 = client.post("/jobs",json={"type":"sleep","payload":{"seconds":9},"idempotency_key":"k1"})
         
     assert res2.status_code == 409
     
     assert res2.json() == {"detail":"a job with similar key already exists"}
+    
